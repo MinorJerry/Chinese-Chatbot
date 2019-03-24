@@ -3,7 +3,7 @@ from AIdialog import *
 USE_CUDA = torch.cuda.is_available()
 #device = torch.device("cuda" if USE_CUDA else "cpu")
 device = torch.device("cpu")
-
+thu1 = thulac.thulac(seg_only = True)
 class EncoderRNN(nn.Module):
     def __init__(self, hidden_size, embedding, n_layers=1, dropout=0):
         super(EncoderRNN, self).__init__()
@@ -297,10 +297,14 @@ def evaluateInput(encoder, decoder, searcher, voc):
             # Normalize sentence
             #input_sentence = normalizeString(input_sentence)
             # Evaluate sentence
+
+           
+
+            input_sentence = thu1.cut(input_sentence,text = True)
             output_words = evaluate(encoder, decoder, searcher, voc, input_sentence)
             # Format and print response sentence
             output_words[:] = [x for x in output_words if not (x == 'EOS' or x == 'PAD')]
-            print('Bot:', ' '.join(output_words))
+            print('Bot:', ''.join(output_words))
 
         except KeyError:
             print("Error: Encountered unknown word.")
@@ -323,9 +327,9 @@ voc, pairs = load_data(corpus_name, datafile)
 # Set checkpoint to load from; set to None if starting from scratch
 loadFilename = None
 checkpoint_iter = 4000
-#loadFilename = os.path.join(save_dir, model_name, corpus_name,
-#                            '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
-#                            '{}_checkpoint.tar'.format(checkpoint_iter))
+loadFilename = os.path.join(save_dir, model_name, corpus_name,
+                            '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
+                            '{}_checkpoint.tar'.format(checkpoint_iter))
 
 # Load model if a loadFilename is provided
 if loadFilename:
