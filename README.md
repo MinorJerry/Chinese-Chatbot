@@ -13,6 +13,8 @@
 
 ## Step2:Our course project
 - Question-Answering System based on Knowledge Retrivaling and seq2seq.
+- Developed by ZJU Guo Shuai & He Hongliang.
+- Better results and exquisite interaction interface.(Please refer to the document.)
 - Part of [Code](https://github.com/ZJUGuoShuai/QA_KG)
 - [Document](https://github.com/MinorJerry/Chinese-Chatbot/blob/master/document.pdf)
 
