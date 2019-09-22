@@ -12,5 +12,5 @@
 ## Step2:Our course project
 - Question-Answering System based on Knowledge Retrivaling and seq2seq.
 - Part of [Code](https://github.com/ZJUGuoShuai/QA_KG)
-- Document
+- [Document](https://github.com/MinorJerry/Chinese-Chatbot/blob/master/document.pdf)
 
