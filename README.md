@@ -10,6 +10,7 @@
 - 目前decoder是GreadySearchDecoder, 使用BeamSearchDecoder可能效果会更好(写的有点问题,到时候再看)
 - 下图展示的是26000次迭代的效果,效果很大程度上取决于数据集
 <p align="center"><img src="https://s2.ax1x.com/2019/09/22/upr44U.png"></p>
+
 ## Step2:Our course project
 - Question-Answering System based on Knowledge Retrivaling and seq2seq.
 - Part of [Code](https://github.com/ZJUGuoShuai/QA_KG)
