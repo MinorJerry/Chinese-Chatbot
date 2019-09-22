@@ -3,7 +3,9 @@ from AIdialog import *
 USE_CUDA = torch.cuda.is_available()
 #device = torch.device("cuda" if USE_CUDA else "cpu")
 device = torch.device("cpu")
-thu1 = thulac.thulac(seg_only = True)
+thu1 = thulac.thulac(seg_only=True)
+
+
 class EncoderRNN(nn.Module):
     def __init__(self, hidden_size, embedding, n_layers=1, dropout=0):
         super(EncoderRNN, self).__init__()
@@ -13,22 +15,28 @@ class EncoderRNN(nn.Module):
 
         # Initialize GRU; the input_size and hidden_size params are both set to 'hidden_size'
         #   because our input size is a word embedding with number of features == hidden_size
-        self.gru = nn.GRU(hidden_size, hidden_size, n_layers,
-                          dropout=(0 if n_layers == 1 else dropout), bidirectional=True)
+        self.gru = nn.GRU(hidden_size,
+                          hidden_size,
+                          n_layers,
+                          dropout=(0 if n_layers == 1 else dropout),
+                          bidirectional=True)
 
     def forward(self, input_seq, input_lengths, hidden=None):
         # Convert word indexes to embeddings
         embedded = self.embedding(input_seq)
         # Pack padded batch of sequences for RNN module
-        packed = torch.nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
+        packed = torch.nn.utils.rnn.pack_padded_sequence(
+            embedded, input_lengths)
         # Forward pass through GRU
         outputs, hidden = self.gru(packed, hidden)
         # Unpack padding
         outputs, _ = torch.nn.utils.rnn.pad_packed_sequence(outputs)
         # Sum bidirectional GRU outputs
-        outputs = outputs[:, :, :self.hidden_size] + outputs[:, : ,self.hidden_size:]
+        outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.
+                                                             hidden_size:]
         # Return output and final hidden state
         return outputs, hidden
+
 
 # Luong attention layer
 class Attn(torch.nn.Module):
@@ -36,7 +44,8 @@ class Attn(torch.nn.Module):
         super(Attn, self).__init__()
         self.method = method
         if self.method not in ['dot', 'general', 'concat']:
-            raise ValueError(self.method, "is not an appropriate attention method.")
+            raise ValueError(self.method,
+                             "is not an appropriate attention method.")
         self.hidden_size = hidden_size
         if self.method == 'general':
             self.attn = torch.nn.Linear(self.hidden_size, hidden_size)
@@ -52,7 +61,9 @@ class Attn(torch.nn.Module):
         return torch.sum(hidden * energy, dim=2)
 
     def concat_score(self, hidden, encoder_output):
-        energy = self.attn(torch.cat((hidden.expand(encoder_output.size(0), -1, -1), encoder_output), 2)).tanh()
+        energy = self.attn(
+            torch.cat((hidden.expand(encoder_output.size(0), -1,
+                                     -1), encoder_output), 2)).tanh()
         return torch.sum(self.v * energy, dim=2)
 
     def forward(self, hidden, encoder_outputs):
@@ -70,8 +81,15 @@ class Attn(torch.nn.Module):
         # Return the softmax normalized probability scores (with added dimension)
         return F.softmax(attn_energies, dim=1).unsqueeze(1)
 
+
 class LuongAttnDecoderRNN(nn.Module):
-    def __init__(self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1):
+    def __init__(self,
+                 attn_model,
+                 embedding,
+                 hidden_size,
+                 output_size,
+                 n_layers=1,
+                 dropout=0.1):
         super(LuongAttnDecoderRNN, self).__init__()
 
         # Keep for reference
@@ -84,7 +102,10 @@ class LuongAttnDecoderRNN(nn.Module):
         # Define layers
         self.embedding = embedding
         self.embedding_dropout = nn.Dropout(dropout)
-        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=(0 if n_layers == 1 else dropout))
+        self.gru = nn.GRU(hidden_size,
+                          hidden_size,
+                          n_layers,
+                          dropout=(0 if n_layers == 1 else dropout))
         self.concat = nn.Linear(hidden_size * 2, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
 
@@ -112,15 +133,29 @@ class LuongAttnDecoderRNN(nn.Module):
         # Return output and final hidden state
         return output, hidden
 
+
 def maskNLLLoss(inp, target, mask):
     nTotal = mask.sum()
-    crossEntropy = -torch.log(torch.gather(inp, 1, target.view(-1, 1)).squeeze(1))
+    crossEntropy = -torch.log(
+        torch.gather(inp, 1, target.view(-1, 1)).squeeze(1))
     loss = crossEntropy.masked_select(mask).mean()
     loss = loss.to(device)
     return loss, nTotal.item()
 
-def train(input_variable, lengths, target_variable, mask, max_target_len, encoder, decoder, embedding,
-          encoder_optimizer, decoder_optimizer, batch_size, clip, max_length=MAX_LENGTH):
+
+def train(input_variable,
+          lengths,
+          target_variable,
+          mask,
+          max_target_len,
+          encoder,
+          decoder,
+          embedding,
+          encoder_optimizer,
+          decoder_optimizer,
+          batch_size,
+          clip,
+          max_length=MAX_LENGTH):
 
     # Zero gradients
     encoder_optimizer.zero_grad()
@@ -148,32 +183,36 @@ def train(input_variable, lengths, target_variable, mask, max_target_len, encode
     decoder_hidden = encoder_hidden[:decoder.n_layers]
 
     # Determine if we are using teacher forcing this iteration
-    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+    use_teacher_forcing = True if random.random(
+    ) < teacher_forcing_ratio else False
 
     # Forward batch of sequences through decoder one time step at a time
     if use_teacher_forcing:
         for t in range(max_target_len):
-            decoder_output, decoder_hidden = decoder(
-                decoder_input, decoder_hidden, encoder_outputs
-            )
+            decoder_output, decoder_hidden = decoder(decoder_input,
+                                                     decoder_hidden,
+                                                     encoder_outputs)
             # Teacher forcing: next input is current target
             decoder_input = target_variable[t].view(1, -1)
             # Calculate and accumulate loss
-            mask_loss, nTotal = maskNLLLoss(decoder_output, target_variable[t], mask[t])
+            mask_loss, nTotal = maskNLLLoss(decoder_output, target_variable[t],
+                                            mask[t])
             loss += mask_loss
             print_losses.append(mask_loss.item() * nTotal)
             n_totals += nTotal
     else:
         for t in range(max_target_len):
-            decoder_output, decoder_hidden = decoder(
-                decoder_input, decoder_hidden, encoder_outputs
-            )
+            decoder_output, decoder_hidden = decoder(decoder_input,
+                                                     decoder_hidden,
+                                                     encoder_outputs)
             # No teacher forcing: next input is decoder's own current output
             _, topi = decoder_output.topk(1)
-            decoder_input = torch.LongTensor([[topi[i][0] for i in range(batch_size)]])
+            decoder_input = torch.LongTensor(
+                [[topi[i][0] for i in range(batch_size)]])
             decoder_input = decoder_input.to(device)
             # Calculate and accumulate loss
-            mask_loss, nTotal = maskNLLLoss(decoder_output, target_variable[t], mask[t])
+            mask_loss, nTotal = maskNLLLoss(decoder_output, target_variable[t],
+                                            mask[t])
             loss += mask_loss
             print_losses.append(mask_loss.item() * nTotal)
             n_totals += nTotal
@@ -191,11 +230,17 @@ def train(input_variable, lengths, target_variable, mask, max_target_len, encode
 
     return sum(print_losses) / n_totals
 
-def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, clip, corpus_name, loadFilename):
+
+def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer,
+               decoder_optimizer, embedding, encoder_n_layers,
+               decoder_n_layers, save_dir, n_iteration, batch_size,
+               print_every, save_every, clip, corpus_name, loadFilename):
 
     # Load batches for each iteration
-    training_batches = [batch2TrainData(voc, [random.choice(pairs) for _ in range(batch_size)])
-                      for _ in range(n_iteration)]
+    training_batches = [
+        batch2TrainData(voc, [random.choice(pairs) for _ in range(batch_size)])
+        for _ in range(n_iteration)
+    ]
 
     # Initializations
     print('Initializing ...')
@@ -212,31 +257,41 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
         input_variable, lengths, target_variable, mask, max_target_len = training_batch
 
         # Run a training iteration with batch
-        loss = train(input_variable, lengths, target_variable, mask, max_target_len, encoder,
-                     decoder, embedding, encoder_optimizer, decoder_optimizer, batch_size, clip)
+        loss = train(input_variable, lengths, target_variable, mask,
+                     max_target_len, encoder, decoder, embedding,
+                     encoder_optimizer, decoder_optimizer, batch_size, clip)
         print_loss += loss
 
         # Print progress
         if iteration % print_every == 0:
             print_loss_avg = print_loss / print_every
-            print("Iteration: {}; Percent complete: {:.1f}%; Average loss: {:.4f}".format(iteration, iteration / n_iteration * 100, print_loss_avg))
+            print(
+                "Iteration: {}; Percent complete: {:.1f}%; Average loss: {:.4f}"
+                .format(iteration, iteration / n_iteration * 100,
+                        print_loss_avg))
             print_loss = 0
 
         # Save checkpoint
         if (iteration % save_every == 0):
-            directory = os.path.join(save_dir, model_name, corpus_name, '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size))
+            directory = os.path.join(
+                save_dir, model_name, corpus_name,
+                '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers,
+                                  hidden_size))
             if not os.path.exists(directory):
                 os.makedirs(directory)
-            torch.save({
-                'iteration': iteration,
-                'en': encoder.state_dict(),
-                'de': decoder.state_dict(),
-                'en_opt': encoder_optimizer.state_dict(),
-                'de_opt': decoder_optimizer.state_dict(),
-                'loss': loss,
-                'voc_dict': voc.__dict__,
-                'embedding': embedding.state_dict()
-            }, os.path.join(directory, '{}_{}.tar'.format(iteration, 'checkpoint')))
+            torch.save(
+                {
+                    'iteration': iteration,
+                    'en': encoder.state_dict(),
+                    'de': decoder.state_dict(),
+                    'en_opt': encoder_optimizer.state_dict(),
+                    'de_opt': decoder_optimizer.state_dict(),
+                    'loss': loss,
+                    'voc_dict': voc.__dict__,
+                    'embedding': embedding.state_dict()
+                },
+                os.path.join(directory,
+                             '{}_{}.tar'.format(iteration, 'checkpoint')))
 
 
 class GreedySearchDecoder(nn.Module):
@@ -251,30 +306,110 @@ class GreedySearchDecoder(nn.Module):
         # Prepare encoder's final hidden layer to be first hidden input to the decoder
         decoder_hidden = encoder_hidden[:decoder.n_layers]
         # Initialize decoder input with SOS_token
-        decoder_input = torch.ones(1, 1, device=device, dtype=torch.long) * SOS_token
+        decoder_input = torch.ones(1, 1, device=device,
+                                   dtype=torch.long) * SOS_token
         # Initialize tensors to append decoded words to
         all_tokens = torch.zeros([0], device=device, dtype=torch.long)
         all_scores = torch.zeros([0], device=device)
         # Iteratively decode one word token at a time
         for _ in range(max_length):
             # Forward pass through decoder
-            decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden, encoder_outputs)
+            decoder_output, decoder_hidden = self.decoder(
+                decoder_input, decoder_hidden, encoder_outputs)
             # Obtain most likely word token and its softmax score
+            #print('decode output:',decoder_output)
             decoder_scores, decoder_input = torch.max(decoder_output, dim=1)
             # Record token and score
             all_tokens = torch.cat((all_tokens, decoder_input), dim=0)
             all_scores = torch.cat((all_scores, decoder_scores), dim=0)
+            if voc.index2word[decoder_input.item()] == 'EOS':
+                
+                break
             # Prepare current token to be next decoder input (add a dimension)
             decoder_input = torch.unsqueeze(decoder_input, 0)
         # Return collections of word tokens and scores
         return all_tokens, all_scores
 
+class BeamSearchDecoder(nn.Module): # 貌似写错了 有空再看看吧
+    def __init__(self, encoder, decoder):
+        super(BeamSearchDecoder, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, input_seq, input_length, max_length):
+        encoder_outputs, encoder_hidden = self.encoder(input_seq, input_length)
+        # Prepare encoder's final hidden layer to be first hidden input to the decoder
+        decoder_hidden = encoder_hidden[:decoder.n_layers]
+        # Initialize decoder input with SOS_token
+        decoder_input = torch.ones(1, 1, device=device,
+                                   dtype=torch.long) * SOS_token
+        all_tokens = torch.zeros([0,0], device=device, dtype=torch.long)
+        all_scores = torch.zeros([0,0], device=device)
+        
+        beam_dim = 5
+        decoder_output, decoder_hidden = self.decoder(
+                decoder_input, decoder_hidden, encoder_outputs)
+        decoder_scores_beam_dim, decoder_input_beam_dim = torch.topk(decoder_output, beam_dim, dim=1) 
+        #all_tokens = torch.cat((all_tokens, decoder_input_beam_dim), dim=0)
+        #all_scores = torch.cat((all_scores, decoder_scores_beam_dim), dim=0)
+        #decoder_input_beam_dim = torch.unsqueeze(decoder_input_beam_dim, 0)
+        all_tokens = decoder_input_beam_dim
+        all_scores = decoder_scores_beam_dim
+        
+        decoder_hidden = [decoder_hidden]*beam_dim
+        for _ in range(max_length-1):
+            max_scores_beam_dim = torch.zeros([0],device=device, dtype=torch.float)
+            inputs_beam_dim = torch.zeros([0],device=device, dtype=torch.long)
+            
+            for i in range(5):
+                decoder_input_curr = torch.unsqueeze(decoder_input_beam_dim[0][i], dim=0)
+                if EOS_token in decoder_input_curr:
+                    max_scores_beam_dim = torch.cat((max_scores_beam_dim, torch.tensor([all_scores[_][i],0,0,0,0])), dim=0)#补全为beam_dim
+                    inputs_beam_dim = torch.cat((inputs_beam_dim, torch.tensor([EOS_token]*beam_dim)), dim=0)
+                    continue
+                decoder_input_curr = torch.unsqueeze(decoder_input_curr, dim=0)
+                decoder_output, decoder_hidden[i] = self.decoder(
+                    decoder_input_curr, decoder_hidden[i], encoder_outputs)
+            
+                decoder_scores_curr, decoder_input_curr = torch.topk(decoder_output, beam_dim, dim=1) 
+
+                max_scores_beam_dim = torch.cat((max_scores_beam_dim, decoder_scores_curr[0]*all_scores[_][i]), dim=0)
+                inputs_beam_dim = torch.cat((inputs_beam_dim, decoder_input_curr[0]), dim=0)
+                
+        
+            scores, next_w_idx = torch.topk(max_scores_beam_dim, beam_dim, dim=0)
+            tokens = torch.zeros([0], device=device, dtype=torch.long)
+            
+            # update all_tokens and decoder_hidden
+            decoder_hidden_tmp = []
+            tokens_tmp = all_tokens
+            for i in range(5):
+                # 从25个中找出最大的5个继续beam search
+                tokens = torch.cat((tokens, torch.unsqueeze(inputs_beam_dim[next_w_idx[i]],dim=0)),dim=0)
+                decoder_hidden_tmp.append(decoder_hidden[int(next_w_idx[i]) // beam_dim])
+                #tokens_tmp.append(all_tokens[_][int(next_w_idx[i]) // beam_dim]) 
+            for i in range(5):
+                decoder_hidden[i] = decoder_hidden_tmp[i]
+                for j in range(_+1):
+                    if int(next_w_idx[i]) // beam_dim != i:
+                        all_tokens[j][i] = tokens_tmp[j][int(next_w_idx[i]) // beam_dim]
+            scores = torch.unsqueeze(scores, dim=0)
+            tokens = torch.unsqueeze(tokens, dim=0)
+            all_tokens = torch.cat((all_tokens, tokens), dim=0)
+            all_scores = torch.cat((all_scores, scores), dim=0)
+            decoder_input_beam_dim = tokens
+        max_s, max_index = torch.max(all_scores[-1],dim=0)
+        return all_tokens[:,max_index],all_scores[:,max_index]
+
+
 def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
     ### Format input sentence as a batch
     # words -> indexes
     indexes_batch = [indexesFromSentence(voc, sentence)]
+    #print('index_batch:',indexes_batch)
     # Create lengths tensor
     lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
+    #print('lengths:',lengths)
     # Transpose dimensions of batch to match models' expectations
     input_batch = torch.LongTensor(indexes_batch).transpose(0, 1)
     # Use appropriate device
@@ -284,11 +419,13 @@ def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
     tokens, scores = searcher(input_batch, lengths, max_length)
     # indexes -> words
     decoded_words = [voc.index2word[token.item()] for token in tokens]
+    
     return decoded_words
+
 
 def evaluateInput(encoder, decoder, searcher, voc):
     input_sentence = ''
-    while(1):
+    while (1):
         try:
             # Get input sentence
             input_sentence = input('> ')
@@ -298,16 +435,19 @@ def evaluateInput(encoder, decoder, searcher, voc):
             #input_sentence = normalizeString(input_sentence)
             # Evaluate sentence
 
-           
-
-            input_sentence = thu1.cut(input_sentence,text = True)
-            output_words = evaluate(encoder, decoder, searcher, voc, input_sentence)
+            input_sentence = thu1.cut(input_sentence, text=True)
+            output_words = evaluate(encoder, decoder, searcher, voc,
+                                    input_sentence)
+            
             # Format and print response sentence
-            output_words[:] = [x for x in output_words if not (x == 'EOS' or x == 'PAD')]
+            output_words[:] = [
+                x for x in output_words if not (x == 'EOS' or x == 'PAD')
+            ]
             print('Bot:', ''.join(output_words))
 
         except KeyError:
             print("Error: Encountered unknown word.")
+
 
 corpus_name = "xiao huang ji"
 datafile = "xiaohuangji50w_nofenci.conv"
@@ -326,10 +466,11 @@ batch_size = 64
 voc, pairs = load_data(corpus_name, datafile)
 # Set checkpoint to load from; set to None if starting from scratch
 loadFilename = None
-checkpoint_iter = 4000
-#loadFilename = os.path.join(save_dir, model_name, corpus_name,
-#                            '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
-#                            '{}_checkpoint.tar'.format(checkpoint_iter))
+checkpoint_iter = 6000
+# loadFilename = os.path.join(
+#     save_dir, model_name, corpus_name,
+#     '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
+#     '{}_checkpoint.tar'.format(checkpoint_iter))
 
 # Load model if a loadFilename is provided
 if loadFilename:
@@ -351,7 +492,8 @@ if loadFilename:
     embedding.load_state_dict(embedding_sd)
 # Initialize encoder & decoder models
 encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
-decoder = LuongAttnDecoderRNN(attn_model, embedding, hidden_size, voc.num, decoder_n_layers, dropout)
+decoder = LuongAttnDecoderRNN(attn_model, embedding, hidden_size, voc.num,
+                              decoder_n_layers, dropout)
 if loadFilename:
     encoder.load_state_dict(encoder_sd)
     decoder.load_state_dict(decoder_sd)
@@ -360,17 +502,14 @@ encoder = encoder.to(device)
 decoder = decoder.to(device)
 print('Models built and ready to go!')
 
-
 # Configure training/optimization
 clip = 50.0
 teacher_forcing_ratio = 1.0
 learning_rate = 0.0001
 decoder_learning_ratio = 5.0
-n_iteration = 4000
+n_iteration = 6000
 print_every = 1
 save_every = 500
-
-
 
 # Ensure dropout layers are in train mode
 encoder.train()
@@ -379,16 +518,18 @@ decoder.train()
 # Initialize optimizers
 print('Building optimizers ...')
 encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
-decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+decoder_optimizer = optim.Adam(decoder.parameters(),
+                               lr=learning_rate * decoder_learning_ratio)
 if loadFilename:
     encoder_optimizer.load_state_dict(encoder_optimizer_sd)
     decoder_optimizer.load_state_dict(decoder_optimizer_sd)
 
 # Run training iterations
 print("Starting Training!")
-trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer,
-           embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size,
-           print_every, save_every, clip, corpus_name, loadFilename)
+trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer,
+           decoder_optimizer, embedding, encoder_n_layers, decoder_n_layers,
+           save_dir, n_iteration, batch_size, print_every, save_every, clip,
+           corpus_name, loadFilename)
 
 # Set dropout layers to eval mode
 encoder.eval()
@@ -396,5 +537,6 @@ decoder.eval()
 
 # Initialize search module
 searcher = GreedySearchDecoder(encoder, decoder)
+#searcher = BeamSearchDecoder(encoder,decoder)
 
 evaluateInput(encoder, decoder, searcher, voc)
