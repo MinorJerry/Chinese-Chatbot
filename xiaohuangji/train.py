@@ -323,8 +323,8 @@ class GreedySearchDecoder(nn.Module):
             all_tokens = torch.cat((all_tokens, decoder_input), dim=0)
             all_scores = torch.cat((all_scores, decoder_scores), dim=0)
             if voc.index2word[decoder_input.item()] == 'EOS':
-                
                 break
+                
             # Prepare current token to be next decoder input (add a dimension)
             decoder_input = torch.unsqueeze(decoder_input, 0)
         # Return collections of word tokens and scores
